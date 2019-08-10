@@ -13,6 +13,10 @@ import typing
 from typing import Union, Callable, Any
 
 
+ENV_TEXT = """All arguments are also available as environment variables in
+all-upper-case."""
+
+
 class DocstringState(enum.Enum):
     """Possible sections in a docstring."""
 
@@ -62,14 +66,6 @@ def parse_docstring(obj: Any) -> dict:
     }
 
 
-def parse_function_typehints(function: Callable) -> dict:
-    """Parse typehints for the given function and return a dict mapping
-    parameters to type hints."""
-    sig_params = inspect.signature(function).parameters
-    hints = {name: param.annotation for name, param in sig_params.items()}
-    return hints
-
-
 def make_union_parser(argfuns):
     def union_parse(token):
         value = None
@@ -110,11 +106,19 @@ def make_dict_parser(keyfun, valfun):
     return dict_parse
 
 
+def make_type_parser(argfun):
+    def type_parse(input_token):
+        if input_token is None:
+            raise ValueError(f"Input should be {argfun} but was {input_token}")
+        return argfun(input_token)
+    return type_parse
+
+
 def infer_typefun(typehint):
     typefun = None
     # try to use directly if not a typehint generic
     if not isinstance(typehint, typing._GenericAlias):
-        typefun = typehint
+        typefun = make_type_parser(typehint)
     elif typehint.__origin__ == typing.Union:
         union_args = [infer_typefun(arg) for arg in typehint.__args__]
         typefun = make_union_parser(union_args)
@@ -133,63 +137,89 @@ def infer_typefun(typehint):
     return typefun
 
 
-def add_target(
-        target: Callable,
-        parser: ArgumentParser, docstrings: dict = None):
-    """Add target to general parser."""
-    if docstrings is None:
-        docstrings = parse_docstring(target)
-    arg_funs = {}
-    args = parse_function_typehints(target)
-    for arg, typehint in args.items():
-        arg_doc = docstrings["args"].get(arg, "")
-        argopt = f"--{arg}"
-        typefun = infer_typefun(typehint)
-        parser.add_argument(argopt, help=arg_doc, type=typefun)
-        arg_funs[arg] = typefun
-
-    return arg_funs
+def parse_function_typehints(function: Callable) -> dict:
+    """Parse typehints for the given function and return a dict mapping
+    parameters to type hints."""
+    hints = {name: param.annotation for name, param in sig_params.items()}
+    return hints
 
 
-def argmagic_group(target: Callable, parser: ArgumentParser):
+def get_function_info(target: Callable) -> dict:
     name = str(target.__name__)
     docstrings = parse_docstring(target)
 
-    target_group = parser.add_argument_group(
-        title=name, description=docstrings["description"])
+    arg_info = {}
+    sig_params = inspect.signature(target).parameters
+    for name, param in sig_params.items():
+        typehint = param.annotation
+        if param.default is inspect.Parameter.empty:
+            typehint = Union[typehint, None]
+        typefun = infer_typefun(typehint)
+        arg_info[name] = {
+            "doc": docstrings["args"].get(name, ""),
+            "typehint": typehint,
+            "typefun": typefun,
+        }
 
-    add_target(target, target_group, docstrings=docstrings)
+    return {
+        "name": name,
+        "description": docstrings["description"],
+        "args": arg_info
+    }
+
+
+def parsermagic(function_info: dict, usage=""):
+    """Create an argparse parser and parse it and return parsed arguments.
+    Returns:
+        Dictionary containing parsed values for arguments.
+    """
+
+    parser = ArgumentParser(
+        prog=function_info["name"],
+        description=function_info["description"])
+
+    for name, arg_info in function_info["args"].items():
+        parser.add_argument(f"--{name}", help=arg_info["doc"], type=arg_info["typefun"])
+
+    args = parser.parse_args()
+    parser_args = {name: getattr(args, name) for name in function_info["args"]}
+    return parser_args
+
+
+def envmagic(function_info: dict):
+    env_args = {}
+    for name, arg_info in function_info["args"].items():
+        raw = os.environ.get(name.upper(), None)
+        env_args[name] = arg_info["typefun"](raw)
+    return env_args
 
 
 def argmagic(target: Callable, environment=True):
     """Generate a parser based on target signature and execute it."""
-    name = str(target.__name__)
-    docstrings = parse_docstring(target)
-    parser = ArgumentParser(
-        prog=name,
-        description=docstrings["description"])
 
-    args = add_target(target, parser, docstrings=docstrings)
+    function_info = get_function_info(target)
 
-    parsed_args = parser.parse_args()
-    env_args = {
-        arg: args[arg](raw) if raw else None
-        for arg, raw in
-        [(arg, os.environ.get(arg.upper(), None)) for arg in args]
-    }
-    cli_args = {arg: getattr(parsed_args, arg) for arg in args}
+    if environment:
+        env_args = envmagic(function_info)
+        usage_text = ENV_TEXT
+    else:
+        env_args = {}
+        usage_text = ""
+
+    parser_args = parsermagic(function_info, usage=usage_text)
+
     target_args = {}
-    for arg in args:
-        if env_args[arg] is None and cli_args[arg] is None:
+    for arg in function_info["args"]:
+        if env_args.get(arg, None) is None and parser_args.get(arg, None) is None:
             continue
-        if cli_args[arg] is None:
+        if parser_args.get(arg, None) is None:
             target_args[arg] = env_args[arg]
         else:
-            target_args[arg] = cli_args[arg]
+            target_args[arg] = parser_args[arg]
     return target(**target_args)
 
 
-def hello(name: str = None):
+def hello(name: str):
     """
     Say hello to name.
 

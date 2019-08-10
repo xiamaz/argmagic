@@ -217,23 +217,3 @@ def argmagic(target: Callable, environment=True):
         else:
             target_args[arg] = parser_args[arg]
     return target(**target_args)
-
-
-def hello(name: str):
-    """
-    Say hello to name.
-
-    Args:
-        name: Your name.
-
-    Raises:
-        Nothing.
-
-    Returns:
-        Nothing.
-    """
-    print("Hello", name)
-
-
-if __name__ == "__main__":
-    result = argmagic(hello)

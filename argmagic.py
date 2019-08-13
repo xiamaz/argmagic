@@ -41,7 +41,7 @@ def parse_docstring(obj: Any) -> dict:
             continue
         elif stripped == "Raises:":
             cur_section = DocstringState.RAISES
-        elif stripped  == "Returns:":
+        elif stripped == "Returns:":
             cur_section = DocstringState.RETURNS
 
         if cur_section == DocstringState.DESCRIPTION:
@@ -137,13 +137,6 @@ def infer_typefun(typehint):
     return typefun
 
 
-def parse_function_typehints(function: Callable) -> dict:
-    """Parse typehints for the given function and return a dict mapping
-    parameters to type hints."""
-    hints = {name: param.annotation for name, param in sig_params.items()}
-    return hints
-
-
 def get_function_info(target: Callable) -> dict:
     name = str(target.__name__)
     docstrings = parse_docstring(target)
@@ -179,7 +172,10 @@ def parsermagic(function_info: dict, usage=""):
         description=function_info["description"])
 
     for name, arg_info in function_info["args"].items():
-        parser.add_argument(f"--{name}", help=arg_info["doc"], type=arg_info["typefun"])
+        parser.add_argument(
+            f"--{name}",
+            help=arg_info["doc"],
+            type=arg_info["typefun"])
 
     args = parser.parse_args()
     parser_args = {name: getattr(args, name) for name in function_info["args"]}
@@ -210,10 +206,12 @@ def argmagic(target: Callable, environment=True):
 
     target_args = {}
     for arg in function_info["args"]:
-        if env_args.get(arg, None) is None and parser_args.get(arg, None) is None:
+        env_arg = env_args.get(arg, None)
+        parser_arg = parser_args.get(arg, None)
+        if env_arg is None and parser_arg is None:
             continue
-        if parser_args.get(arg, None) is None:
-            target_args[arg] = env_args[arg]
+        if parser_arg is None:
+            target_args[arg] = env_arg
         else:
-            target_args[arg] = parser_args[arg]
+            target_args[arg] = parser_arg
     return target(**target_args)

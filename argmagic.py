@@ -190,6 +190,14 @@ def envmagic(function_info: dict):
     return env_args
 
 
+def extract_args(env_args: dict, parser_args: dict) -> dict:
+    """Combine arguments from env variables and parser results."""
+    target_args = env_args.copy()
+    for name, arg in parser_args:
+        target_args[name] = arg
+    return target_args
+
+
 def argmagic(target: Callable, environment=True):
     """Generate a parser based on target signature and execute it."""
 
@@ -204,14 +212,6 @@ def argmagic(target: Callable, environment=True):
 
     parser_args = parsermagic(function_info, usage=usage_text)
 
-    target_args = {}
-    for arg in function_info["args"]:
-        env_arg = env_args.get(arg, None)
-        parser_arg = parser_args.get(arg, None)
-        if env_arg is None and parser_arg is None:
-            continue
-        if parser_arg is None:
-            target_args[arg] = env_arg
-        else:
-            target_args[arg] = parser_arg
+    target_args = extract_args(env_args, parser_args)
+
     return target(**target_args)

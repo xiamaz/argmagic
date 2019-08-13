@@ -56,3 +56,26 @@ These can then again be overriden by CLI arguments.
 $ NAME=test hello.py --name something
 Hello something
 ```
+
+## Support of composite types
+
+Current parsing of lists, tuples and unions are supported.
+
+For example a typehint containing `List[str]`, will parse input `[a, b, c]` to
+a python list containing `["a", "b", "c"]`.
+
+Also these types can be arbitrarily nested, such as `Dict[str, List[int]]` will
+correctly parse strings of structure `{a: [1, 2, 3], b: [5, 3]}`.
+
+Syntax overview:
+
+```
+Tuple syntax:
+(a, b, c)
+
+List syntax:
+[a, b, c]
+
+Dict syntax:
+{a: i, b: j, k: l}
+```

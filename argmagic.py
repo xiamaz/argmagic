@@ -5,6 +5,7 @@ docstring.
 Either wrap your function in argmagic or fill a python dataclass structure.
 """
 import os
+import json
 import enum
 import inspect
 from collections import defaultdict
@@ -32,7 +33,7 @@ def parse_docstring(obj: Any) -> dict:
     cur_section = DocstringState.DESCRIPTION
     current_arg = None
     indent_level = None
-    description = []
+    description_lines = []
 
     for line in inspect.getdoc(obj).split("\n"):
         stripped = line.strip()
@@ -45,7 +46,7 @@ def parse_docstring(obj: Any) -> dict:
             cur_section = DocstringState.RETURNS
 
         if cur_section == DocstringState.DESCRIPTION:
-            description.append(line)
+            description_lines.append(line)
         elif cur_section == DocstringState.ARGS:
             indent = len(line) - len(line.lstrip())
             if indent_level is None:
@@ -59,9 +60,10 @@ def parse_docstring(obj: Any) -> dict:
                 args_lines[current_arg].append(line.strip())
 
     args_strings = {arg: "\n".join(lines) for arg, lines in args_lines.items()}
+    description = "\n".join(description_lines).rstrip("\n")
 
     return {
-        "description": "\n".join(description),
+        "description": description,
         "args": args_strings
     }
 
@@ -79,30 +81,82 @@ def make_union_parser(argfuns):
     return union_parse
 
 
+def remove_start_end(token, start, end):
+    """Remove the enclosing tags"""
+    token = token.strip()
+    if not (token.startswith(start) and token.endswith(end)):
+        raise ValueError
+    return token[1:-1]
+
+
+NESTING_BEGIN = ["(", "{", "["]
+NESTING_END = [")", "}", "]"]
+
+
+def tokenize(line, sep=",", num=None):
+    """Tokenize using the current sep, but do not split inside nesting tags."""
+    tokens = []
+    start = 0
+    nesting_level = 0
+    splits = 0
+    for i, char in enumerate(line):
+        if char in NESTING_BEGIN:
+            nesting_level += 1
+
+        if char in NESTING_END:
+            nesting_level -= 1
+        if nesting_level == 0 and char == sep:
+            tokens.append(line[start:i])
+            start = i + 1
+            splits += 1
+        if num is not None and splits == num:
+            break
+    tokens.append(line[start:])
+    return tokens
+
+
 def make_tuple_parser(argfuns):
+
     def tuple_parse(input_token):
-        tokens = [s.strip() for s in input_token.split(",")]
+        input_token = remove_start_end(input_token, "(", ")")
+        tokens = tokenize(input_token, ",")
         value = tuple(
-            typefun(token) for typefun, token in zip(argfuns, tokens))
+            typefun(token.strip()) for typefun, token in zip(argfuns, tokens)
+        )
         return value
+
     return tuple_parse
 
 
-def make_list_parser(argfun):
+def make_list_parser(argfun, start="[", end="]"):
+
     def list_parse(input_token):
-        value = [argfun(s.strip()) for s in input_token.split(",")]
+        input_token = remove_start_end(input_token, "[", "]")
+
+        tokens = tokenize(input_token, ",")
+
+        value = [argfun(token.strip()) for token in tokens]
         return value
+
     return list_parse
 
 
 def make_dict_parser(keyfun, valfun):
+
     def dict_parse(input_token):
-        value = {
-            keyfun(rawkey.strip()): valfun(rawval.strip())
-            for rawkey, rawval in
-            [token.split(":", 1) for token in input_token.split(",")]
-        }
-        return value
+        input_token = remove_start_end(input_token, "{", "}")
+
+        kvtokens = tokenize(input_token, ",")
+
+        dictvalue = {}
+        for kvtoken in kvtokens:
+            rawkey, rawval = tokenize(input_token, ":", 1)
+            key = keyfun(rawkey)
+            value = valfun(rawval)
+            dictvalue[key] = value
+
+        return dictvalue
+
     return dict_parse
 
 
@@ -122,16 +176,17 @@ def infer_typefun(typehint):
     elif typehint.__origin__ == typing.Union:
         union_args = [infer_typefun(arg) for arg in typehint.__args__]
         typefun = make_union_parser(union_args)
-    elif typehint.__origin__ == typing.Tuple:
+    elif typehint.__origin__ in (typing.Tuple, tuple):
         tuple_fields = [infer_typefun(arg) for arg in typehint.__args__]
         typefun = make_tuple_parser(tuple_fields)
-    elif typehint.__origin__ == typing.List:
+    elif typehint.__origin__ in (typing.List, list):
         listfun = infer_typefun(typehint.__args__[0])
         typefun = make_list_parser(listfun)
-    elif typehint.__origin__ == typing.Dict:
+    elif typehint.__origin__ in (typing.Dict, dict):
         key_fun, val_fun = [infer_typefun(arg) for arg in typehint.__args__]
         typefun = make_dict_parser(key_fun, val_fun)
     else:
+        print(typehint.__origin__)
         raise NotImplementedError(f"{typehint} not implemented")
 
     return typefun

@@ -144,3 +144,15 @@ class CreateArgparseParserTestCase(unittest.TestCase):
         args = parser.parse_args(["--name", "testname", "--number", "6"])
         self.assertEqual(args.name, "testname")
         self.assertEqual(args.number, 6)
+
+
+class ExtractArgsTestCase(unittest.TestCase):
+    def test_merging(self):
+        cases = [
+            ({"a": 1, "b": 4}, {"b": None}, {"a": 1, "b": 4}),
+            ({"b": 4}, {"a": None}, {"a": None, "b": 4}),
+            ({"b": None}, {"a": None}, {"a": None, "b": None})
+        ]
+        for dict_a, dict_b, expected in cases:
+            result = argmagic.extract_args(dict_a, dict_b)
+            self.assertDictEqual(result, expected)

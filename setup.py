@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="argmagic",
-    version="0.0.2",
+    version="0.0.4",
     author="Max Zhao",
     author_email="alcasa.mz@gmail.com",
     description="Parse environment variables and CLI arguments for a given function signature.",

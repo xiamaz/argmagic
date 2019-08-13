@@ -216,28 +216,26 @@ def get_function_info(target: Callable) -> dict:
     }
 
 
-def parsermagic(function_info: dict, usage=""):
-    """Create an argparse parser and parse it and return parsed arguments.
-    Returns:
-        Dictionary containing parsed values for arguments.
-    """
-
-    parser = ArgumentParser(
-        prog=function_info["name"],
-        description=function_info["description"])
+def create_argparse_parser(function_info: dict, usage="", parser=None):
+    """Create an argparse parser."""
+    if parser is None:
+        parser = ArgumentParser(
+            prog=function_info["name"],
+            description=function_info["description"])
+    else:
+        parser = parser.add_argument_group(
+            title=function_info["name"],
+            description=function_info["description"])
 
     for name, arg_info in function_info["args"].items():
         parser.add_argument(
             f"--{name}",
             help=arg_info["doc"],
             type=arg_info["typefun"])
-
-    args = parser.parse_args()
-    parser_args = {name: getattr(args, name) for name in function_info["args"]}
-    return parser_args
+    return parser
 
 
-def envmagic(function_info: dict):
+def parse_env_args(function_info: dict) -> dict:
     env_args = {}
     for name, arg_info in function_info["args"].items():
         raw = os.environ.get(name.upper(), None)
@@ -253,19 +251,23 @@ def extract_args(env_args: dict, parser_args: dict) -> dict:
     return target_args
 
 
-def argmagic(target: Callable, environment=True):
+def argmagic(target: Callable, environment=True, parser=None):
     """Generate a parser based on target signature and execute it."""
 
     function_info = get_function_info(target)
 
     if environment:
-        env_args = envmagic(function_info)
+        env_args = parse_env_args(function_info)
         usage_text = ENV_TEXT
     else:
         env_args = {}
         usage_text = ""
 
-    parser_args = parsermagic(function_info, usage=usage_text)
+    parser = create_argparse_parser(
+        function_info, usage=usage_text, parser=parser)
+
+    args = parser.parse_args()
+    parser_args = {name: getattr(args, name) for name in function_info["args"]}
 
     target_args = extract_args(env_args, parser_args)
 

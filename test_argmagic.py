@@ -112,4 +112,35 @@ class InferTypefunTestCase(unittest.TestCase):
         for name, typefun, cases in tests:
             for testvalue, expected in cases:
                 with self.subTest(name=name, value=testvalue):
-                    self.assertEquals(typefun(testvalue), expected)
+                    self.assertEqual(typefun(testvalue), expected)
+
+
+class CreateArgparseParserTestCase(unittest.TestCase):
+
+    def test_simple(self):
+        function_info = {
+            "name": "simple", "description": "testdesc", "args": {
+                "name": {
+                    "doc": "A simple name",
+                    "typefun": str,
+                },
+                "number": {
+                    "doc": "A simple number",
+                    "typefun": int,
+                }
+            }
+        }
+        parser = argmagic.create_argparse_parser(function_info)
+        self.assertEqual(parser.prog, "simple")
+        self.assertEqual(parser.description, "testdesc")
+
+        optionals = parser._get_optional_actions()
+        dests = [o.dest for o in optionals]
+        helps = [o.help for o in optionals]
+        for name, arg in function_info["args"].items():
+            self.assertIn(arg["doc"], helps)
+            self.assertIn(name, dests)
+
+        args = parser.parse_args(["--name", "testname", "--number", "6"])
+        self.assertEqual(args.name, "testname")
+        self.assertEqual(args.number, 6)

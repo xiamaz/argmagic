@@ -248,7 +248,7 @@ def envmagic(function_info: dict):
 def extract_args(env_args: dict, parser_args: dict) -> dict:
     """Combine arguments from env variables and parser results."""
     target_args = env_args.copy()
-    for name, arg in parser_args:
+    for name, arg in parser_args.items():
         target_args[name] = arg
     return target_args
 

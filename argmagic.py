@@ -238,8 +238,11 @@ def create_argparse_parser(function_info: dict, usage="", parser=None):
 def parse_env_args(function_info: dict) -> dict:
     env_args = {}
     for name, arg_info in function_info["args"].items():
-        raw = os.environ.get(name.upper(), None)
-        env_args[name] = arg_info["typefun"](raw)
+        try:
+            raw = os.environ[name.upper()]
+            env_args[name] = arg_info["typefun"](raw)
+        except KeyError:
+            continue
     return env_args
 
 

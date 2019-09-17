@@ -35,7 +35,11 @@ def parse_docstring(obj: Any) -> dict:
     indent_level = None
     description_lines = []
 
-    for line in inspect.getdoc(obj).split("\n"):
+    docstring = inspect.getdoc(obj)
+    if docstring is None:
+        return {"description": "", "args": {}}
+
+    for line in docstring.split("\n"):
         stripped = line.strip()
         if stripped == "Args:":
             cur_section = DocstringState.ARGS

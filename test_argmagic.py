@@ -3,6 +3,10 @@ import unittest
 from typing import Union, List, Tuple, Dict
 
 
+def no_docstring():
+    pass
+
+
 def simple():
     """
     This is a function.
@@ -50,6 +54,10 @@ class ParseDocstringTestCase(unittest.TestCase):
     - cook your meals
     - start a startup
     - go to the moon""",
+                "args": {},
+            }),
+            ("no_docstring", no_docstring, {
+                "description": "",
                 "args": {},
             }),
         ]

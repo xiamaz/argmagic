@@ -11,7 +11,7 @@ import inspect
 from collections import defaultdict
 from argparse import ArgumentParser
 import typing
-from typing import Union, Callable, Any
+from typing import Union, Callable, Any, Iterable
 
 
 ENV_TEXT = """All arguments are also available as environment variables in
@@ -164,11 +164,27 @@ def make_dict_parser(keyfun, valfun):
     return dict_parse
 
 
+def is_simple_bool(typehint) -> bool:
+    """Check if typehint is bool or Union[None, bool]."""
+    if typehint is bool:
+        return True
+    if isinstance(typehint, typing._GenericAlias) and bool in typehint.__args__:
+        return True
+    return False
+
+
 def make_type_parser(argfun):
+    def bool_parse(input_token):
+        return argfun(int(input_token))
+
     def type_parse(input_token):
         if input_token is None:
             raise ValueError(f"Input should be {argfun} but was {input_token}")
         return argfun(input_token)
+
+    if argfun is bool:
+        return bool_parse
+
     return type_parse
 
 
@@ -223,6 +239,23 @@ def get_function_info(target: Callable) -> dict:
     }
 
 
+def add_argument(
+        parser: ArgumentParser,
+        name: str,
+        arg_info: dict,
+        use_flags: bool = True):
+    if use_flags and is_simple_bool(arg_info["typehint"]):
+        parser.add_argument(
+            f"--{name}",
+            help=arg_info["doc"],
+            action="store_true")
+    else:
+        parser.add_argument(
+            f"--{name}",
+            help=arg_info["doc"],
+            type=arg_info["typefun"])
+
+
 def create_argparse_parser(
         function_info: dict,
         usage="",
@@ -242,16 +275,10 @@ def create_argparse_parser(
         if name in positional:
             continue
 
-        parser.add_argument(
-            f"--{name}",
-            help=arg_info["doc"],
-            type=arg_info["typefun"])
+        add_argument(parser, name, arg_info)
 
     for name in positional:
-        parser.add_argument(
-            f"{name}",
-            help=function_info["args"][name]["doc"],
-            type=function_info["args"][name]["typefun"])
+        add_argument(parser, name, function_info["args"][name])
     return parser
 
 
@@ -285,7 +312,11 @@ def validate_args(
             parser.error(f"{name} is required but not given")
 
 
-def argmagic(target: Callable, positional=(), environment=True, parser=None):
+def argmagic(
+        target: Callable,
+        positional: Iterable = (),
+        environment: bool = True,
+        parser: ArgumentParser = None):
     """Generate a parser based on target signature and execute it."""
 
     function_info = get_function_info(target)

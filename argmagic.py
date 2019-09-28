@@ -223,7 +223,11 @@ def get_function_info(target: Callable) -> dict:
     }
 
 
-def create_argparse_parser(function_info: dict, usage="", parser=None):
+def create_argparse_parser(
+        function_info: dict,
+        usage="",
+        parser=None,
+        positional=()):
     """Create an argparse parser."""
     if parser is None:
         parser = ArgumentParser(
@@ -235,10 +239,19 @@ def create_argparse_parser(function_info: dict, usage="", parser=None):
             description=function_info["description"])
 
     for name, arg_info in function_info["args"].items():
+        if name in positional:
+            continue
+
         parser.add_argument(
             f"--{name}",
             help=arg_info["doc"],
             type=arg_info["typefun"])
+
+    for name in positional:
+        parser.add_argument(
+            f"{name}",
+            help=function_info["args"][name]["doc"],
+            type=function_info["args"][name]["typefun"])
     return parser
 
 
@@ -272,7 +285,7 @@ def validate_args(
             parser.error(f"{name} is required but not given")
 
 
-def argmagic(target: Callable, environment=True, parser=None):
+def argmagic(target: Callable, positional=(), environment=True, parser=None):
     """Generate a parser based on target signature and execute it."""
 
     function_info = get_function_info(target)
@@ -285,7 +298,7 @@ def argmagic(target: Callable, environment=True, parser=None):
         usage_text = ""
 
     parser = create_argparse_parser(
-        function_info, usage=usage_text, parser=parser)
+        function_info, usage=usage_text, parser=parser, positional=positional)
 
     args = parser.parse_args()
     parser_args = {name: getattr(args, name) for name in function_info["args"]}

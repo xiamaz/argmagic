@@ -1,6 +1,8 @@
-import argmagic
 import unittest
 from typing import Union, List, Tuple, Dict
+from argparse import ArgumentParser
+
+import argmagic
 
 
 def no_docstring():
@@ -164,3 +166,31 @@ class ExtractArgsTestCase(unittest.TestCase):
         for dict_a, dict_b, expected in cases:
             result = argmagic.extract_args(dict_a, dict_b)
             self.assertDictEqual(result, expected)
+
+
+class ArgsValidationTestCase(unittest.TestCase):
+    def test_validate(self):
+        parser = ArgumentParser()
+        function_info = {
+            "args": {
+                "a": {
+                    "required": True
+                },
+                "b": {
+                    "required": False
+                },
+            }
+        }
+
+        cases = [
+            ({"a": None, "b": None}, False),
+            ({"a": None, "b": 2}, False),
+            ({"a": 1, "b": 2}, True),
+            ({"a": 1, "b": None}, True),
+        ]
+        for args, valid in cases:
+            if not valid:
+                with self.assertRaises(SystemExit):
+                    argmagic.validate_args(parser, function_info, args)
+            else:
+                argmagic.validate_args(parser, function_info, args)

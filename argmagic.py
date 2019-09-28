@@ -204,13 +204,16 @@ def get_function_info(target: Callable) -> dict:
     sig_params = inspect.signature(target).parameters
     for name, param in sig_params.items():
         typehint = param.annotation
+        required = False
         if param.default is inspect.Parameter.empty:
             typehint = Union[typehint, None]
+            required = True
         typefun = infer_typefun(typehint)
         arg_info[name] = {
             "doc": docstrings["args"].get(name, ""),
             "typehint": typehint,
             "typefun": typefun,
+            "required": required,
         }
 
     return {
@@ -259,6 +262,16 @@ def extract_args(env_args: dict, parser_args: dict) -> dict:
     return target_args
 
 
+def validate_args(
+        parser: ArgumentParser,
+        function_info: dict,
+        target_args: dict) -> None:
+    """Check whether required args are included."""
+    for name, arg_info in function_info["args"].items():
+        if arg_info["required"] and target_args[name] is None:
+            parser.error(f"{name} is required but not given")
+
+
 def argmagic(target: Callable, environment=True, parser=None):
     """Generate a parser based on target signature and execute it."""
 
@@ -278,5 +291,7 @@ def argmagic(target: Callable, environment=True, parser=None):
     parser_args = {name: getattr(args, name) for name in function_info["args"]}
 
     target_args = extract_args(env_args, parser_args)
+
+    validate_args(parser, function_info, target_args)
 
     return target(**target_args)

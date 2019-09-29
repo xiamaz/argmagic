@@ -243,7 +243,7 @@ def add_argument(
         parser: ArgumentParser,
         name: str,
         arg_info: dict,
-        use_flags: bool = True):
+        use_flags: bool):
     if use_flags and is_simple_bool(arg_info["typehint"]):
         parser.add_argument(
             f"--{name}",
@@ -258,9 +258,10 @@ def add_argument(
 
 def create_argparse_parser(
         function_info: dict,
-        usage="",
-        parser=None,
-        positional=()):
+        use_flags: bool,
+        usage: str = "",
+        parser: ArgumentParser = None,
+        positional: Iterable[str] = ()):
     """Create an argparse parser."""
     if parser is None:
         parser = ArgumentParser(
@@ -275,10 +276,11 @@ def create_argparse_parser(
         if name in positional:
             continue
 
-        add_argument(parser, name, arg_info)
+        add_argument(parser, name, arg_info, use_flags=use_flags)
 
     for name in positional:
-        add_argument(parser, name, function_info["args"][name])
+        add_argument(
+            parser, name, function_info["args"][name], use_flags=use_flags)
     return parser
 
 
@@ -316,6 +318,7 @@ def argmagic(
         target: Callable,
         positional: Iterable = (),
         environment: bool = True,
+        use_flags: bool = False,
         parser: ArgumentParser = None):
     """Generate a parser based on target signature and execute it."""
 
@@ -329,7 +332,11 @@ def argmagic(
         usage_text = ""
 
     parser = create_argparse_parser(
-        function_info, usage=usage_text, parser=parser, positional=positional)
+        function_info,
+        usage=usage_text,
+        parser=parser,
+        use_flags=use_flags,
+        positional=positional)
 
     args = parser.parse_args()
     parser_args = {name: getattr(args, name) for name in function_info["args"]}

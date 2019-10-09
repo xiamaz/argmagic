@@ -140,7 +140,7 @@ class CreateArgparseParserTestCase(unittest.TestCase):
                 }
             }
         }
-        parser = argmagic.create_argparse_parser(function_info)
+        parser = argmagic.create_argparse_parser(function_info, use_flags=False)
         self.assertEqual(parser.prog, "simple")
         self.assertEqual(parser.description, "testdesc")
 

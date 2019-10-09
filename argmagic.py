@@ -168,7 +168,7 @@ def is_simple_bool(typehint) -> bool:
     """Check if typehint is bool or Union[None, bool]."""
     if typehint is bool:
         return True
-    if isinstance(typehint, typing._GenericAlias) and bool in typehint.__args__:
+    if hasattr(typehint, "__args__") and bool in typehint.__args__:
         return True
     return False
 
@@ -191,7 +191,7 @@ def make_type_parser(argfun):
 def infer_typefun(typehint):
     typefun = None
     # try to use directly if not a typehint generic
-    if not isinstance(typehint, typing._GenericAlias):
+    if not hasattr(typehint, "__origin__"):
         typefun = make_type_parser(typehint)
     elif typehint.__origin__ == typing.Union:
         union_args = [infer_typefun(arg) for arg in typehint.__args__]

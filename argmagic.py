@@ -5,17 +5,18 @@ docstring.
 Either wrap your function in argmagic or fill a python dataclass structure.
 """
 import os
-import json
 import enum
 import inspect
 from collections import defaultdict
 from argparse import ArgumentParser
 import typing
-from typing import Union, Callable, Any, Iterable
+from typing import Union, Callable, Any, Iterable, Dict
+
+from dataclasses import dataclass
 
 
-ENV_TEXT = """All arguments are also available as environment variables in
-all-upper-case."""
+FUNCTION_ENV_NOTICE = "Env vars for parameters are formatted as FUNNAME_PARAM"
+ENV_NOTICE = "Env var setting params by UPPERCASE_NAME"
 
 
 class DocstringState(enum.Enum):
@@ -212,28 +213,36 @@ def infer_typefun(typehint):
     return typefun
 
 
-def get_function_info(target: Callable) -> dict:
-    name = str(target.__name__)
+@dataclass
+class ArgumentInformation:
+    typehint: "Typehint"
+    default: Any
+    docstring: str = ""
+    converter: Callable = None
+    required: bool = False
+
+    def __post_init__(self):
+        if self.default is inspect.Parameter.empty:
+            self.typehint = Union[self.typehint, None]
+            self.required = True
+
+        if self.converter is None:
+            self.converter = infer_typefun(self.typehint)
+
+
+def get_function_info(target: Callable) -> Dict[str, ArgumentInformation]:
+    function_name = str(target.__name__)
     docstrings = parse_docstring(target)
 
     arg_info = {}
     sig_params = inspect.signature(target).parameters
     for name, param in sig_params.items():
-        typehint = param.annotation
-        required = False
-        if param.default is inspect.Parameter.empty:
-            typehint = Union[typehint, None]
-            required = True
-        typefun = infer_typefun(typehint)
-        arg_info[name] = {
-            "doc": docstrings["args"].get(name, ""),
-            "typehint": typehint,
-            "typefun": typefun,
-            "required": required,
-        }
+        docstring = docstrings["args"].get(function_name, "")
+        arg_info[name] = ArgumentInformation(
+            param.annotation, param.default, docstring=docstring)
 
     return {
-        "name": name,
+        "name": function_name,
         "description": docstrings["description"],
         "args": arg_info
     }
@@ -242,60 +251,47 @@ def get_function_info(target: Callable) -> dict:
 def add_argument(
         parser: ArgumentParser,
         name: str,
-        arg_info: dict,
+        arg_info: ArgumentInformation,
         use_flags: bool):
-    if use_flags and is_simple_bool(arg_info["typehint"]):
+    if use_flags and is_simple_bool(arg_info.typehint):
         parser.add_argument(
-            f"--{name}",
-            help=arg_info["doc"],
-            action="store_true")
+            name, help=arg_info.docstring, action="store_true")
     else:
         parser.add_argument(
-            f"--{name}",
-            help=arg_info["doc"],
-            type=arg_info["typefun"])
+            name, help=arg_info.docstring, type=arg_info.converter)
 
 
-def create_argparse_parser(
-        function_info: dict,
+def add_arguments_to_parser(
+        parser: ArgumentParser,
+        arguments: dict,
         use_flags: bool,
-        usage: str = "",
-        parser: ArgumentParser = None,
         positional: Iterable[str] = ()):
     """Create an argparse parser."""
-    if parser is None:
-        parser = ArgumentParser(
-            prog=function_info["name"],
-            description=function_info["description"])
-    else:
-        parser = parser.add_argument_group(
-            title=function_info["name"],
-            description=function_info["description"])
-
-    for name, arg_info in function_info["args"].items():
+    for name, arg_info in arguments.items():
         if name in positional:
             continue
 
-        add_argument(parser, name, arg_info, use_flags=use_flags)
+        add_argument(parser, f"--{name}", arg_info, use_flags=use_flags)
 
     for name in positional:
         add_argument(
-            parser, name, function_info["args"][name], use_flags=use_flags)
+            parser, name, arguments[name], use_flags=use_flags)
     return parser
 
 
-def parse_env_args(function_info: dict) -> dict:
+def parse_env(env_names, arguments: dict) -> dict:
     env_args = {}
-    for name, arg_info in function_info["args"].items():
+    for env_name, arg_name in env_names.items():
+        arg_info = arguments[arg_name]
         try:
-            raw = os.environ[name.upper()]
-            env_args[name] = arg_info["typefun"](raw)
+            raw = os.environ[env_name]
+            env_args[arg_name] = arg_info.converter(raw)
         except KeyError:
             continue
     return env_args
 
 
-def extract_args(env_args: dict, parser_args: dict) -> dict:
+def merge_args(env_args: dict, parser_args: dict) -> dict:
     """Combine arguments from env variables and parser results."""
     target_args = env_args.copy()
     for name, arg in parser_args.items():
@@ -304,45 +300,105 @@ def extract_args(env_args: dict, parser_args: dict) -> dict:
     return target_args
 
 
+class FunctionInformation:
+    def __init__(
+            self,
+            function: Callable,
+            positional: Iterable[str] = (),
+            prefix=False):
+        self.function = function
+        self._info = get_function_info(function)
+
+        self.positional = positional
+
+        self.prefix = self._info["name"]
+        self.description = self._info["description"]
+
+        self.args = self._info["args"]
+        self.env_args = {
+            f"{self.prefix}_{n}".upper() if prefix else n.upper(): n
+            for n in self.args
+        }
+
+    def add_parser(self, subparsers=None, use_flags=False):
+        if subparsers is None:
+            parser = ArgumentParser(
+                prog=self.prefix,
+                epilog=ENV_NOTICE,
+                description=self.description)
+        else:
+            parser = subparsers.add_parser(
+                self.prefix,
+                help=self.description,
+                description=self.description)
+
+        parser.set_defaults(fun=self)
+
+        add_arguments_to_parser(
+            parser,
+            self.args,
+            use_flags=use_flags,
+            positional=self.positional
+        )
+        return parser
+
+    def parse_env_cli(self, parsed, environment=True):
+        """Get args from env and cli."""
+        cli_args = {name: getattr(parsed, name) for name in self.args}
+        if environment:
+            env_args = parse_env(self.env_args, self.args)
+        else:
+            env_args = {}
+
+        all_args = merge_args(env_args, cli_args)
+        return all_args
+
+
 def validate_args(
         parser: ArgumentParser,
-        function_info: dict,
+        funtion_info: FunctionInformation,
         target_args: dict) -> None:
     """Check whether required args are included."""
-    for name, arg_info in function_info["args"].items():
-        if arg_info["required"] and target_args[name] is None:
+    for name, arg_info in funtion_info.args.items():
+        if arg_info.required and target_args[name] is None:
             parser.error(f"{name} is required but not given")
 
 
 def argmagic(
-        target: Callable,
+        target,
         positional: Iterable = (),
         environment: bool = True,
         use_flags: bool = False,
+        description: str = "",
         parser: ArgumentParser = None):
     """Generate a parser based on target signature and execute it."""
-
-    function_info = get_function_info(target)
-
-    if environment:
-        env_args = parse_env_args(function_info)
-        usage_text = ENV_TEXT
-    else:
-        env_args = {}
-        usage_text = ""
-
-    parser = create_argparse_parser(
-        function_info,
-        usage=usage_text,
-        parser=parser,
-        use_flags=use_flags,
-        positional=positional)
+    try:
+        infos = [
+            FunctionInformation(t, positional=positional, prefix=True)
+            for t in target
+        ]
+        parser = ArgumentParser(
+            description=description,
+            epilog=FUNCTION_ENV_NOTICE,
+        )
+        subparsers = parser.add_subparsers(help="Available subcommands")
+        for info in infos:
+            info.add_parser(subparsers, use_flags=use_flags)
+    except TypeError:
+        info = FunctionInformation(
+            target, positional=positional, prefix=False)
+        parser = info.add_parser(use_flags=use_flags)
 
     args = parser.parse_args()
-    parser_args = {name: getattr(args, name) for name in function_info["args"]}
 
-    target_args = extract_args(env_args, parser_args)
+    # get the selected active function to get args for
+    if not hasattr(args, "fun"):
+        parser.print_help()
+        parser.exit(1)
 
-    validate_args(parser, function_info, target_args)
+    active = args.fun
+    function_args = active.parse_env_cli(args, environment=environment)
 
-    return target(**target_args)
+    validate_args(parser, info, function_args)
+
+    return active.function(**function_args)

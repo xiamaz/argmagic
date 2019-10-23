@@ -5,13 +5,15 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="argmagic",
-    version="0.0.8",
     author="Max Zhao",
     author_email="alcasa.mz@gmail.com",
     description="Parse environment variables and CLI arguments for a given function signature.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/xiamaz/argmagic",
+    use_scm_version=True,
+    setup_requires=['setuptools_scm'],
+    python_requires=">=3.6",
     py_modules=["argmagic"],
     classifiers=[
         "Programming Language :: Python :: 3",

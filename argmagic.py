@@ -357,10 +357,10 @@ class FunctionInformation:
 def validate_args(
         parser: ArgumentParser,
         funtion_info: FunctionInformation,
-        target_args: dict) -> None:
+        parsed_args: dict) -> None:
     """Check whether required args are included."""
     for name, arg_info in funtion_info.args.items():
-        if arg_info.required and target_args[name] is None:
+        if arg_info.required and parsed_args[name] is None:
             parser.error(f"{name} is required but not given")
 
 
@@ -399,6 +399,6 @@ def argmagic(
     active = args.fun
     function_args = active.parse_env_cli(args, environment=environment)
 
-    validate_args(parser, info, function_args)
+    validate_args(parser, active, function_args)
 
     return active.function(**function_args)

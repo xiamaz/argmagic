@@ -1,5 +1,7 @@
 # Argmagic
 
+Based on a idea by [@lbb](https://github.com/lbb/).
+
 Automatically generate argparse based env-var/CLI-interface from a given function.
 
 Example:

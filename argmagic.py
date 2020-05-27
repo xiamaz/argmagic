@@ -183,6 +183,12 @@ def make_type_parser(argfun):
             raise ValueError(f"Input should be {argfun} but was {input_token}")
         return argfun(input_token)
 
+    def pass_parse(input_token):
+        return input_token
+
+    if argfun is inspect._empty:
+        return pass_parse
+
     if argfun is bool:
         return bool_parse
 
@@ -370,7 +376,8 @@ def argmagic(
         environment: bool = True,
         use_flags: bool = False,
         description: str = "",
-        parser: ArgumentParser = None):
+        parser: ArgumentParser = None,
+        args: list = None):
     """Generate a parser based on target signature and execute it."""
     try:
         infos = [
@@ -389,7 +396,7 @@ def argmagic(
             target, positional=positional, prefix=False)
         parser = info.add_parser(use_flags=use_flags)
 
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     # get the selected active function to get args for
     if not hasattr(args, "fun"):

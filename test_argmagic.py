@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import patch
 from typing import Union, List, Tuple, Dict
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 
 import argmagic
 
@@ -21,7 +22,7 @@ def simple_1arg(hello: str):
     Args:
         hello: Your name.
     """
-    print("Hello", hello)
+    return f"Hello {hello}"
 
 
 def simple_complex_desc():
@@ -34,6 +35,12 @@ def simple_complex_desc():
         Nothing
     """
     # but the docstring lied
+    return "Hello"
+
+
+def simple_1arg_nohint(hello):
+    """This will print hello. Since cli args are strings, we should be able to use that."""
+    return f"Hello {hello}"
 
 
 
@@ -60,6 +67,10 @@ class ParseDocstringTestCase(unittest.TestCase):
             }),
             ("no_docstring", no_docstring, {
                 "description": "",
+                "args": {},
+            }),
+            ("simple_1arg_nohint", simple_1arg_nohint, {
+                "description": "This will print hello. Since cli args are strings, we should be able to use that.",
                 "args": {},
             }),
         ]
@@ -125,72 +136,13 @@ class InferTypefunTestCase(unittest.TestCase):
                     self.assertEqual(typefun(testvalue), expected)
 
 
-class CreateArgparseParserTestCase(unittest.TestCase):
-
+class ArgmagicTestCase(unittest.TestCase):
     def test_simple(self):
-        function_info = {
-            "name": "simple", "description": "testdesc", "args": {
-                "name": {
-                    "doc": "A simple name",
-                    "typefun": str,
-                },
-                "number": {
-                    "doc": "A simple number",
-                    "typefun": int,
-                }
-            }
-        }
-        parser = argmagic.create_argparse_parser(function_info, use_flags=False)
-        self.assertEqual(parser.prog, "simple")
-        self.assertEqual(parser.description, "testdesc")
+        resp = argmagic.argmagic(simple_1arg, args=["--hello", "hello"])
+        self.assertEqual(resp, "Hello hello")
 
-        optionals = parser._get_optional_actions()
-        dests = [o.dest for o in optionals]
-        helps = [o.help for o in optionals]
-        for name, arg in function_info["args"].items():
-            self.assertIn(arg["doc"], helps)
-            self.assertIn(name, dests)
+        resp = argmagic.argmagic(simple_1arg, positional=("hello",), args=["hello"])
+        self.assertEqual(resp, "Hello hello")
 
-        args = parser.parse_args(["--name", "testname", "--number", "6"])
-        self.assertEqual(args.name, "testname")
-        self.assertEqual(args.number, 6)
-
-
-class ExtractArgsTestCase(unittest.TestCase):
-    def test_merging(self):
-        cases = [
-            ({"a": 1, "b": 4}, {"b": None}, {"a": 1, "b": 4}),
-            ({"b": 4}, {"a": None}, {"a": None, "b": 4}),
-            ({"b": None}, {"a": None}, {"a": None, "b": None})
-        ]
-        for dict_a, dict_b, expected in cases:
-            result = argmagic.extract_args(dict_a, dict_b)
-            self.assertDictEqual(result, expected)
-
-
-class ArgsValidationTestCase(unittest.TestCase):
-    def test_validate(self):
-        parser = ArgumentParser()
-        function_info = {
-            "args": {
-                "a": {
-                    "required": True
-                },
-                "b": {
-                    "required": False
-                },
-            }
-        }
-
-        cases = [
-            ({"a": None, "b": None}, False),
-            ({"a": None, "b": 2}, False),
-            ({"a": 1, "b": 2}, True),
-            ({"a": 1, "b": None}, True),
-        ]
-        for args, valid in cases:
-            if not valid:
-                with self.assertRaises(SystemExit):
-                    argmagic.validate_args(parser, function_info, args)
-            else:
-                argmagic.validate_args(parser, function_info, args)
+        resp = argmagic.argmagic(simple_1arg_nohint, positional=("hello",), args=["hello"])
+        self.assertEqual(resp, "Hello hello")

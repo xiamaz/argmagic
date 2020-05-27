@@ -370,32 +370,7 @@ def validate_args(
             parser.error(f"{name} is required but not given")
 
 
-def argmagic(
-        target,
-        positional: Iterable = (),
-        environment: bool = True,
-        use_flags: bool = False,
-        description: str = "",
-        parser: ArgumentParser = None,
-        args: list = None):
-    """Generate a parser based on target signature and execute it."""
-    try:
-        infos = [
-            FunctionInformation(t, positional=positional, prefix=True)
-            for t in target
-        ]
-        parser = ArgumentParser(
-            description=description,
-            epilog=FUNCTION_ENV_NOTICE,
-        )
-        subparsers = parser.add_subparsers(help="Available subcommands")
-        for info in infos:
-            info.add_parser(subparsers, use_flags=use_flags)
-    except TypeError:
-        info = FunctionInformation(
-            target, positional=positional, prefix=False)
-        parser = info.add_parser(use_flags=use_flags)
-
+def _execute_argmagic(parser, args, environment):
     args = parser.parse_args(args)
 
     # get the selected active function to get args for
@@ -409,3 +384,41 @@ def argmagic(
     validate_args(parser, active, function_args)
 
     return active.function(**function_args)
+
+
+def argmagic_subparsers(
+        targets: "List[dict]",
+        environment: bool = True,
+        use_flags: bool = False,
+        description: str = "",
+        parser: ArgumentParser = None,
+        args: list = None):
+    """Generate a parser with multiple subparsers."""
+    parser = ArgumentParser(
+        description=description,
+        epilog=FUNCTION_ENV_NOTICE,
+    )
+    subparsers = parser.add_subparsers(help="Available subcommands")
+
+    for target_def in targets:
+        target = target_def["target"]
+        positional = target_def.get("positional", tuple())
+        info = FunctionInformation(target, positional=positional, prefix=True)
+        info.add_parser(subparsers, use_flags=use_flags)
+
+    return _execute_argmagic(parser, args, environment)
+
+
+def argmagic(
+        target,
+        positional: Iterable = (),
+        environment: bool = True,
+        use_flags: bool = False,
+        parser: ArgumentParser = None,
+        args: list = None):
+    """Generate a parser based on target signature and execute it."""
+    info = FunctionInformation(
+        target, positional=positional, prefix=False)
+    parser = info.add_parser(use_flags=use_flags)
+
+    return _execute_argmagic(parser, args, environment)

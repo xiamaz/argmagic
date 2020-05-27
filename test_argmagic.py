@@ -43,6 +43,14 @@ def simple_1arg_nohint(hello):
     return f"Hello {hello}"
 
 
+def fun_2arg(a: int, b: float):
+    return a + b
+
+
+def fun_3arg(x: int, y: int, z: int):
+    return max(x, y, z)
+
+
 
 class ParseDocstringTestCase(unittest.TestCase):
 
@@ -146,3 +154,15 @@ class ArgmagicTestCase(unittest.TestCase):
 
         resp = argmagic.argmagic(simple_1arg_nohint, positional=("hello",), args=["hello"])
         self.assertEqual(resp, "Hello hello")
+
+    def test_subparsers(self):
+        resp = argmagic.argmagic_subparsers([
+            {"target": fun_2arg, "positional": ("a",)},
+            {"target": fun_3arg, "positional": ("z",)}
+        ], args=["fun_2arg", "--b", "30", "10"])
+        self.assertEqual(resp, 40)
+        resp = argmagic.argmagic_subparsers([
+            {"target": fun_2arg, "positional": ("a",)},
+            {"target": fun_3arg, "positional": ("z",)}
+        ], args=["fun_3arg", "--x", "30", "--y", "100", "1000"])
+        self.assertEqual(resp, 1000)

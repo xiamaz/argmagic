@@ -1,5 +1,7 @@
 import setuptools
 
+__version__ = "0.0.10"
+
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
@@ -12,7 +14,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/xiamaz/argmagic",
     use_scm_version=True,
-    setup_requires=['setuptools_scm'],
+    version=__version__,
     python_requires=">=3.6",
     py_modules=["argmagic"],
     classifiers=[

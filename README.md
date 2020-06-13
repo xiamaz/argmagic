@@ -81,3 +81,7 @@ List syntax:
 Dict syntax:
 {a: i, b: j, k: l}
 ```
+
+## Alternatives
+
+[click](https://github.com/pallets/click) uses decorators

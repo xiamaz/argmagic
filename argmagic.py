@@ -350,7 +350,12 @@ class FunctionInformation:
 
     def parse_env_cli(self, parsed, environment=True):
         """Get args from env and cli."""
-        cli_args = {name: getattr(parsed, name) for name in self.args}
+        cli_args = {
+            name: cli_arg for name, cli_arg in
+            [(name, getattr(parsed, name)) for name, info in self.args.items()]
+            if cli_arg is not None
+        }
+
         if environment:
             env_args = parse_env(self.env_args, self.args)
         else:

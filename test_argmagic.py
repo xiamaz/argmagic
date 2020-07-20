@@ -24,6 +24,14 @@ def simple_1arg(hello: str):
     """
     return f"Hello {hello}"
 
+def simple_1arg_default(hello: str = "default"):
+    """This will print hello.
+
+    Args:
+        hello: Your name.
+    """
+    return f"Hello {hello}"
+
 
 def simple_complex_desc():
     """ This will print hello and do more stuff such as:
@@ -166,3 +174,7 @@ class ArgmagicTestCase(unittest.TestCase):
             {"target": fun_3arg, "positional": ("z",)}
         ], args=["fun_3arg", "--x", "30", "--y", "100", "1000"])
         self.assertEqual(resp, 1000)
+
+    def test_default(self):
+        resp = argmagic.argmagic(simple_1arg_default, args=[])
+        self.assertEqual(resp, "Hello default")
